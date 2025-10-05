@@ -1,0 +1,256 @@
+{% extends 'frontend/base.html' %}
+
+{% block content %}
+<div class="card">
+    <h1>Upload Image for PPE Detection</h1>
+    <p>Upload an image to detect Personal Protective Equipment (PPE) including helmets and safety vests.</p>
+    
+    <div class="grid grid-2">
+        <div>
+            <h3>Upload Area</h3>
+            <div id="uploadArea" style="border: 2px dashed #ccc; padding: 2rem; text-align: center; border-radius: 10px; margin: 1rem 0;">
+                <p>Drag & drop an image here or click to browse</p>
+                <input type="file" id="imageInput" accept="image/*" style="display: none;">
+                <button class="btn btn-primary" onclick="document.getElementById('imageInput').click()">Select Image</button>
+            </div>
+            
+            <div id="imagePreview" style="display: none; margin: 1rem 0;">
+                <h4>Image Preview:</h4>
+                <img id="previewImg" class="image-preview" style="max-height: 300px;">
+            </div>
+            
+            <div id="uploadOptions" style="display: none;">
+                <h4>Upload Options</h4>
+                <button class="btn btn-primary" onclick="uploadImage()">Analyze Image</button>
+                <button class="btn btn-secondary" onclick="clearUpload()">Cancel</button>
+            </div>
+            
+            <div id="uploadResult" style="margin: 1rem 0;"></div>
+        </div>
+        
+        <div>
+            <h3>Detection Guidelines</h3>
+            <div class="detection-item">
+                <strong>Helmets</strong>
+                <p>Hard hats and safety helmets will be detected with bounding boxes</p>
+            </div>
+            <div class="detection-item">
+                <strong>Safety Vests</strong>
+                <p>High-visibility vests and reflective clothing</p>
+            </div>
+            <div class="detection-item">
+                <strong>Person Detection</strong>
+                <p>People in the image will be detected for context</p>
+            </div>
+            
+            <h4 style="margin-top: 2rem;">Supported Formats</h4>
+            <ul>
+                <li>JPEG, JPG</li>
+                <li>PNG</li>
+                <li>BMP</li>
+                <li>WebP</li>
+            </ul>
+            
+            <h4>File Size Limit</h4>
+            <p>Maximum file size: 10MB</p>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block scripts %}
+<script>
+    let selectedFile = null;
+    
+    // Setup drag and drop
+    const uploadArea = document.getElementById('uploadArea');
+    const imageInput = document.getElementById('imageInput');
+    
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.style.borderColor = '#667eea';
+        uploadArea.style.backgroundColor = '#f8f9fa';
+    });
+    
+    uploadArea.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        uploadArea.style.borderColor = '#ccc';
+        uploadArea.style.backgroundColor = '';
+    });
+    
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.style.borderColor = '#ccc';
+        uploadArea.style.backgroundColor = '';
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFileSelect(files[0]);
+        }
+    });
+    
+    imageInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            handleFileSelect(e.target.files[0]);
+        }
+    });
+    
+    function handleFileSelect(file) {
+        // Validate file type
+        const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp', 'image/webp'];
+        if (!validTypes.includes(file.type)) {
+            alert('Please select a valid image file (JPEG, PNG, BMP, WebP)');
+            return;
+        }
+        
+        // Validate file size (10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            alert('File size must be less than 10MB');
+            return;
+        }
+        
+        selectedFile = file;
+        
+        // Show preview
+        const previewImg = document.getElementById('previewImg');
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+            previewImg.src = e.target.result;
+            document.getElementById('imagePreview').style.display = 'block';
+            document.getElementById('uploadOptions').style.display = 'block';
+        };
+        
+        reader.readAsDataURL(file);
+    }
+    
+    function clearUpload() {
+        selectedFile = null;
+        imageInput.value = '';
+        document.getElementById('imagePreview').style.display = 'none';
+        document.getElementById('uploadOptions').style.display = 'none';
+        document.getElementById('uploadResult').innerHTML = '';
+    }
+    
+    async function uploadImage() {
+        if (!selectedFile) {
+            alert('Please select an image first');
+            return;
+        }
+
+        const resultDiv = document.getElementById('uploadResult');
+        resultDiv.innerHTML = '<div class="loading">Processing image... This may take a few seconds.</div>';
+
+        const formData = new FormData();
+        formData.append('image', selectedFile);
+
+        try {
+            console.log('Starting upload...');
+            const response = await fetch('/api/images', {
+                method: 'POST',
+                body: formData
+            });
+
+            console.log('Upload response status:', response.status);
+            
+            // Get raw response text first
+            const responseText = await response.text();
+            console.log('Raw response (first 200 chars):', responseText.substring(0, 200));
+            
+            let data;
+            try {
+                // Try to parse as JSON
+                data = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error('JSON parse error:', parseError);
+                // Show detailed error info
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>Server Error - Could not parse response</h4>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <p><strong>Content-Type:</strong> ${response.headers.get('content-type')}</p>
+                        <details>
+                            <summary>Click to see server response</summary>
+                            <pre>${responseText.substring(0, 1000)}</pre>
+                        </details>
+                        <p><strong>Common fixes:</strong></p>
+                        <ul>
+                            <li>Check if Django server is running</li>
+                            <li>Check Django console for Python errors</li>
+                            <li>Verify the API endpoint exists</li>
+                        </ul>
+                    </div>
+                `;
+                return;
+            }
+            
+            // If we get here, we have JSON data
+            console.log('Parsed data:', data);
+            
+            if (response.ok) {
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h4>✅ Analysis Complete!</h4>
+                        <p><strong>Image ID:</strong> ${data.id}</p>
+                        <p><strong>Detections Found:</strong> ${data.detections ? data.detections.length : 0}</p>
+                        <p><strong>Message:</strong> ${data.message}</p>
+                        <div style="margin: 1rem 0;">
+                            <button class="btn btn-primary" onclick="uploadAnother()">Upload Another Image</button>
+                        </div>
+                        ${data.detections && data.detections.length > 0 ? `
+                            <h5>Detections:</h5>
+                            <div style="max-height: 200px; overflow-y: auto;">
+                                ${data.detections.map(detection => `
+                                    <div class="detection-item">
+                                        <strong>${detection.label.toUpperCase()}</strong><br>
+                                        Confidence: ${(detection.confidence * 100).toFixed(1)}%<br>
+                                        BBox: [${detection.bbox.map(b => b.toFixed(3)).join(', ')}]
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : '<p>No PPE detected in this image.</p>'}
+                    </div>
+                `;
+            } else {
+                const errorMessage = data.error?.message || data.message || `Upload failed (Status: ${response.status})`;
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>Upload Failed</h4>
+                        <p><strong>Error:</strong> ${errorMessage}</p>
+                        ${data.error?.code ? `<p><strong>Code:</strong> ${data.error.code}</p>` : ''}
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Network error:', error);
+            resultDiv.innerHTML = `
+                <div class="error">
+                    <h4>Network Error</h4>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p>Please check if the server is running on http://127.0.0.1:8000</p>
+                    <button class="btn btn-secondary" onclick="location.reload()">Reload Page</button>
+                </div>
+            `;
+        }
+    }
+    
+    function uploadAnother() {
+        clearUpload();
+        document.getElementById('uploadResult').innerHTML = '';
+    }
+    
+    // Check authentication on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            document.getElementById('uploadArea').innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <h3>Authentication Required</h3>
+                    <p>Please login to upload and analyze images</p>
+                    <button class="btn btn-primary" onclick="showLogin()">Login</button>
+                </div>
+            `;
+        }
+    });
+</script>
+{% endblock scripts %}

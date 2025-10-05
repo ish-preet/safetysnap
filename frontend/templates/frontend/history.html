@@ -1,0 +1,254 @@
+{% extends 'frontend/base.html' %}
+
+{% block content %}
+<div class="card">
+    <h1>Image History</h1>
+    <p>View your previously analyzed images with filtering and pagination.</p>
+    
+    <!-- Filters -->
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+        <h3>Filters</h3>
+        <div class="grid grid-3">
+            <div>
+                <label for="labelFilter">PPE Label:</label>
+                <select id="labelFilter" class="form-control" style="width: 100%; padding: 0.5rem; margin: 0.5rem 0;">
+                    <option value="">All Labels</option>
+                    <option value="helmet">Helmet</option>
+                    <option value="vest">Safety Vest</option>
+                    <option value="person">Person</option>
+                    <option value="none">No PPE</option>
+                </select>
+            </div>
+            <div>
+                <label for="fromDate">From Date:</label>
+                <input type="date" id="fromDate" class="form-control" style="width: 100%; padding: 0.5rem; margin: 0.5rem 0;">
+            </div>
+            <div>
+                <label for="toDate">To Date:</label>
+                <input type="date" id="toDate" class="form-control" style="width: 100%; padding: 0.5rem; margin: 0.5rem 0;">
+            </div>
+        </div>
+        <button class="btn btn-primary" onclick="applyFilters()" style="margin-top: 1rem;">Apply Filters</button>
+        <button class="btn btn-secondary" onclick="clearFilters()" style="margin-top: 1rem; margin-left: 0.5rem;">Clear Filters</button>
+    </div>
+    
+    <!-- Results -->
+    <div id="loadingIndicator" class="loading">Loading images...</div>
+    <div id="historyResults" style="display: none;">
+        <div id="resultsHeader" style="margin-bottom: 1rem;">
+            <span id="resultsCount">0 images found</span>
+            <div style="float: right;">
+                <label for="limitSelect">Items per page:</label>
+                <select id="limitSelect" onchange="changeLimit()" style="padding: 0.25rem; margin-left: 0.5rem;">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+        </div>
+        
+        <div id="imagesList"></div>
+        
+        <!-- Pagination -->
+        <div id="pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 2rem;">
+            <button id="prevBtn" class="btn btn-secondary" onclick="previousPage()" disabled>Previous</button>
+            <span id="pageInfo">Page 1</span>
+            <button id="nextBtn" class="btn btn-secondary" onclick="nextPage()" disabled>Next</button>
+        </div>
+    </div>
+    
+    <div id="noResults" style="display: none; text-align: center; padding: 3rem;">
+        <h3>No Images Found</h3>
+        <p>No images match your current filters.</p>
+        <a href="/upload" class="btn btn-primary">Upload Your First Image</a>
+    </div>
+</div>
+{% endblock content %}
+
+{% block scripts %}
+<script>
+    let currentOffset = 0;
+    let currentLimit = 10;
+    let currentFilters = {};
+    
+    async function loadHistory() {
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const historyResults = document.getElementById('historyResults');
+        const noResults = document.getElementById('noResults');
+        
+        loadingIndicator.style.display = 'block';
+        historyResults.style.display = 'none';
+        noResults.style.display = 'none';
+        
+        // Build query string - using GET parameters
+        const params = new URLSearchParams({
+            limit: currentLimit,
+            offset: currentOffset
+        });
+        
+        if (currentFilters.label) params.append('label', currentFilters.label);
+        if (currentFilters.from) params.append('from', currentFilters.from);
+        if (currentFilters.to) params.append('to', currentFilters.to);
+        
+        try {
+            console.log('Loading history with params:', params.toString());
+            const response = await fetch(`/api/images/?${params}`);
+            
+            console.log('History response status:', response.status);
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log('History data received:', data);
+                
+                loadingIndicator.style.display = 'none';
+                
+                if (data.items && data.items.length > 0) {
+                    displayImages(data.items);
+                    updatePagination(data);
+                    historyResults.style.display = 'block';
+                } else {
+                    noResults.style.display = 'block';
+                }
+                
+                document.getElementById('resultsCount').textContent = `${data.total} images found`;
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.error?.message || `Failed to load history (Status: ${response.status})`);
+            }
+        } catch (error) {
+            console.error('History load error:', error);
+            loadingIndicator.innerHTML = `<div class="error">Error loading history: ${error.message}</div>`;
+        }
+    }
+    
+    function displayImages(images) {
+        const imagesList = document.getElementById('imagesList');
+        
+        imagesList.innerHTML = images.map(image => `
+            <div class="card" style="margin-bottom: 1rem; padding: 1rem;">
+                <div class="grid grid-2">
+                    <div>
+                        <h4>Image #${image.id}</h4>
+                        <p><strong>Uploaded:</strong> ${new Date(image.upload_date).toLocaleString()}</p>
+                        <p><strong>Detections:</strong> ${image.detections.length}</p>
+                        <p><strong>Detection Hash:</strong> <code title="${image.detections_hash}">${image.detections_hash.substring(0, 16)}...</code></p>
+                        
+                        <div style="margin-top: 1rem;">
+                            <a href="/result/${image.id}" class="btn btn-primary">View Details</a>
+                        </div>
+                    </div>
+                    <div>
+                        ${image.annotated_image_url ? `
+                            <img src="${image.annotated_image_url}" class="image-preview" style="max-height: 200px;" 
+                                 onerror="this.style.display='none'">
+                        ` : ''}
+                        ${image.image_url ? `
+                            <img src="${image.image_url}" class="image-preview" style="max-height: 200px;">
+                        ` : '<p>No image preview available</p>'}
+                    </div>
+                </div>
+                
+                ${image.detections.length > 0 ? `
+                    <div style="margin-top: 1rem;">
+                        <strong>Detections:</strong>
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+                            ${image.detections.map(detection => `
+                                <span style="background: #667eea; color: white; padding: 0.25rem 0.5rem; border-radius: 15px; font-size: 0.8rem;">
+                                    ${detection.label} (${(detection.confidence * 100).toFixed(0)}%)
+                                </span>
+                            `).join('')}
+                        </div>
+                    </div>
+                ` : '<p>No PPE detected</p>'}
+            </div>
+        `).join('');
+    }
+    
+    function updatePagination(data) {
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const pageInfo = document.getElementById('pageInfo');
+        
+        const currentPage = Math.floor(currentOffset / currentLimit) + 1;
+        const totalPages = Math.ceil(data.total / currentLimit);
+        
+        pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+        
+        prevBtn.disabled = currentOffset === 0;
+        nextBtn.disabled = !data.next_offset;
+    }
+    
+    function applyFilters() {
+        currentOffset = 0;
+        currentFilters = {
+            label: document.getElementById('labelFilter').value,
+            from: document.getElementById('fromDate').value,
+            to: document.getElementById('toDate').value
+        };
+        
+        console.log('Applying filters:', currentFilters);
+        loadHistory();
+    }
+    
+    function clearFilters() {
+        document.getElementById('labelFilter').value = '';
+        document.getElementById('fromDate').value = '';
+        document.getElementById('toDate').value = '';
+        
+        currentOffset = 0;
+        currentFilters = {};
+        console.log('Cleared filters');
+        loadHistory();
+    }
+    
+    function changeLimit() {
+        currentLimit = parseInt(document.getElementById('limitSelect').value);
+        currentOffset = 0;
+        console.log('Changed limit to:', currentLimit);
+        loadHistory();
+    }
+    
+    function previousPage() {
+        currentOffset = Math.max(0, currentOffset - currentLimit);
+        console.log('Previous page, offset:', currentOffset);
+        loadHistory();
+    }
+    
+    function nextPage() {
+        currentOffset += currentLimit;
+        console.log('Next page, offset:', currentOffset);
+        loadHistory();
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            document.getElementById('loadingIndicator').innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <h3>Authentication Required</h3>
+                    <p>Please login to view your image history</p>
+                    <button class="btn btn-primary" onclick="showLogin()">Login</button>
+                </div>
+            `;
+        } else {
+            console.log('Loading history on page load...');
+            loadHistory();
+        }
+    });
+</script>
+
+<style>
+    .form-control {
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    
+    .form-control:focus {
+        border-color: #667eea;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    }
+</style>
+{% endblock scripts %}

@@ -1,0 +1,131 @@
+{% extends 'frontend/base.html' %}
+
+{% block content %}
+<div class="card">
+    <h1>PPE Analytics Dashboard</h1>
+    <p>Comprehensive analytics and insights from your PPE detection history.</p>
+</div>
+
+<div class="grid grid-4">
+    <div class="stat-card">
+        <div class="stat-number" id="totalImages">0</div>
+        <div>Total Images</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number" id="complianceRate">0%</div>
+        <div>PPE Compliance</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number" id="helmetCount">0</div>
+        <div>Helmets Detected</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number" id="vestCount">0</div>
+        <div>Vests Detected</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Detection Statistics</h3>
+    <div id="detectionStats" class="loading">Loading statistics...</div>
+</div>
+
+<div class="card">
+    <h3>Timeline Overview</h3>
+    <div id="timelineChart" class="loading">Loading timeline...</div>
+</div>
+{% endblock content %}
+
+{% block scripts %}
+<script>
+    async function loadAnalytics() {
+        try {
+            console.log('Loading analytics...');
+            const response = await fetch('/api/analytics');
+            
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Analytics data:', data);
+                displayAnalytics(data);
+            } else {
+                throw new Error('Failed to load analytics data');
+            }
+        } catch (error) {
+            console.error('Analytics error:', error);
+            document.getElementById('detectionStats').innerHTML = `<div class="error">Error loading analytics: ${error.message}</div>`;
+        }
+    }
+    
+    function displayAnalytics(data) {
+        // Update summary cards
+        document.getElementById('totalImages').textContent = data.total_images;
+        document.getElementById('complianceRate').textContent = data.compliance_rate.toFixed(1) + '%';
+        
+        // Find helmet and vest counts
+        const helmetStat = data.detection_stats.find(stat => stat.label === 'helmet');
+        const vestStat = data.detection_stats.find(stat => stat.label === 'vest');
+        
+        document.getElementById('helmetCount').textContent = helmetStat ? helmetStat.count : 0;
+        document.getElementById('vestCount').textContent = vestStat ? vestStat.count : 0;
+        
+        // Display detection statistics
+        const statsElement = document.getElementById('detectionStats');
+        statsElement.innerHTML = `
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: #f8f9fa;">
+                        <th style="padding: 0.75rem; text-align: left; border-bottom: 1px solid #ddd;">Label</th>
+                        <th style="padding: 0.75rem; text-align: right; border-bottom: 1px solid #ddd;">Count</th>
+                        <th style="padding: 0.75rem; text-align: right; border-bottom: 1px solid #ddd;">Avg Confidence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.detection_stats.map(stat => `
+                        <tr>
+                            <td style="padding: 0.75rem; border-bottom: 1px solid #ddd; text-transform: capitalize;">${stat.label}</td>
+                            <td style="padding: 0.75rem; border-bottom: 1px solid #ddd; text-align: right;">${stat.count}</td>
+                            <td style="padding: 0.75rem; border-bottom: 1px solid #ddd; text-align: right;">${(stat.avg_confidence * 100).toFixed(1)}%</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+        
+        // Display timeline
+        const timelineElement = document.getElementById('timelineChart');
+        timelineElement.innerHTML = `
+            <div style="display: flex; align-items: end; gap: 1rem; height: 200px; padding: 1rem 0;">
+                ${data.images_by_date.map(day => {
+                    const maxHeight = 150;
+                    const height = (day.count / Math.max(...data.images_by_date.map(d => d.count))) * maxHeight;
+                    return `
+                        <div style="display: flex; flex-direction: column; align-items: center; height: 100%;">
+                            <div style="background: #28a745; width: 30px; height: ${height}px; border-radius: 5px 5px 0 0;"></div>
+                            <div style="margin-top: 0.5rem; font-size: 0.8rem; writing-mode: vertical-rl; text-orientation: mixed;">
+                                ${new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            <p style="text-align: center; margin-top: 1rem;"><strong>Images uploaded per day</strong></p>
+        `;
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            document.getElementById('detectionStats').innerHTML = `
+                <div style="text-align: center; padding: 2rem;">
+                    <h3>Authentication Required</h3>
+                    <p>Please login to view analytics</p>
+                    <button class="btn btn-primary" onclick="showLogin()">Login</button>
+                </div>
+            `;
+        } else {
+            loadAnalytics();
+        }
+    });
+</script>
+{% endblock scripts %}

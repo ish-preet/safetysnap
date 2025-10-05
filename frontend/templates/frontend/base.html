@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafetySnap - PPE Detection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-decoration: none;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+        
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        .nav-links a:hover, .nav-links a.active {
+            background-color: rgba(255,255,255,0.2);
+        }
+        
+        .auth-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .grid {
+            display: grid;
+            gap: 2rem;
+        }
+        
+        .grid-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+        
+        .grid-3 {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+        
+        .grid-4 {
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+        }
+        
+        .image-preview {
+            max-width: 100%;
+            border-radius: 5px;
+            margin: 1rem 0;
+        }
+        
+        .detection-item {
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 5px;
+            margin: 1rem 0;
+        }
+        
+        .success {
+            background-color: #d1edff;
+            color: #155724;
+            padding: 1rem;
+            border-radius: 5px;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">SafetySnap</a>
+            <ul class="nav-links">
+                <li><a href="/upload">Upload</a></li>
+                <li><a href="/history">History</a></li>
+                <li><a href="/analytics">Analytics</a></li>
+            </ul>
+            <div class="auth-buttons" id="authButtons">
+                <!-- Dynamically filled by JavaScript -->
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% block content %}
+        {% endblock content %}
+    </div>
+
+    <script>
+        // Authentication state management
+        function updateAuthButtons() {
+            const authButtons = document.getElementById('authButtons');
+            const token = localStorage.getItem('authToken');
+            const user = localStorage.getItem('user');
+            
+            if (token && user) {
+                try {
+                    const userData = JSON.parse(user);
+                    authButtons.innerHTML = `
+                        <span style="color: white; margin-right: 1rem;">Welcome, ${userData.username}</span>
+                        <button class="btn btn-secondary" onclick="logout()">Logout</button>
+                    `;
+                } catch (e) {
+                    console.error('Error parsing user data:', e);
+                    authButtons.innerHTML = `
+                        <button class="btn btn-primary" onclick="showLogin()">Login</button>
+                        <button class="btn btn-secondary" onclick="showRegister()">Register</button>
+                    `;
+                }
+            } else {
+                authButtons.innerHTML = `
+                    <button class="btn btn-primary" onclick="showLogin()">Login</button>
+                    <button class="btn btn-secondary" onclick="showRegister()">Register</button>
+                `;
+            }
+        }
+        
+        function showLogin() {
+            const username = prompt('Username:');
+            const password = prompt('Password:');
+            
+            if (username && password) {
+                login(username, password);
+            }
+        }
+        
+        function showRegister() {
+            const username = prompt('Username:');
+            const email = prompt('Email:');
+            const password = prompt('Password:');
+            
+            if (username && email && password) {
+                register(username, email, password);
+            }
+        }
+        
+        async function login(username, password) {
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRFToken()
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        localStorage.setItem('authToken', 'true');
+                        localStorage.setItem('user', JSON.stringify(data.user));
+                        updateAuthButtons();
+                        window.location.reload();
+                    } else {
+                        const errorMessage = data.error?.message || data.message || `Login failed (Status: ${response.status})`;
+                        alert('Login failed: ' + errorMessage);
+                    }
+                } else {
+                    const text = await response.text();
+                    alert(`Login failed: Server returned non-JSON response (Status: ${response.status})`);
+                    console.error('Non-JSON response:', text.substring(0, 200));
+                }
+            } catch (error) {
+                alert('Login failed: ' + error.message);
+            }
+        }
+        
+        async function register(username, email, password) {
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCSRFToken()
+                    },
+                    body: JSON.stringify({ username, email, password })
+                });
+                
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        alert('Registration successful! Please login.');
+                        showLogin();
+                    } else {
+                        const errorMessage = data.error?.message || data.message || 'Registration failed';
+                        alert('Registration failed: ' + errorMessage);
+                    }
+                } else {
+                    alert('Registration failed: Server returned non-JSON response');
+                }
+            } catch (error) {
+                alert('Registration failed: ' + error.message);
+            }
+        }
+        
+        function logout() {
+            fetch('/api/logout', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCSRFToken()
+                }
+            }).then(() => {
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('user');
+                updateAuthButtons();
+                window.location.reload();
+            });
+        }
+        
+        function getCSRFToken() {
+            const name = 'csrftoken';
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', updateAuthButtons);
+    </script>
+    
+    {% block scripts %}
+    {% endblock scripts %}
+</body>
+</html>

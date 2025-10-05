@@ -1,0 +1,19 @@
+{% extends 'frontend/base.html' %}
+
+{% block content %}
+<div class="card">
+    <h1>Analysis Results</h1>
+    <p>Results for image ID: {{ image_id }}</p>
+    <div id="resultContent" class="loading">Loading results...</div>
+</div>
+{% endblock content %}
+
+{% block scripts %}
+<script>
+    // Simple result page
+    document.addEventListener('DOMContentLoaded', function() {
+        const resultContent = document.getElementById('resultContent');
+        resultContent.innerHTML = '<p>Detailed results will be available after API is working.</p>';
+    });
+</script>
+{% endblock scripts %}

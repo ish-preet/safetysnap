@@ -1,0 +1,83 @@
+{% extends 'frontend/base.html' %}
+
+{% block content %}
+<div class="card">
+    <h1>Welcome to SafetySnap</h1>
+    <p>Upload images to detect Personal Protective Equipment (PPE) including helmets and safety vests.</p>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-number" id="totalImages">0</div>
+            <div>Total Images</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="complianceRate">0%</div>
+            <div>PPE Compliance</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="helmetDetections">0</div>
+            <div>Helmets Detected</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="vestDetections">0</div>
+            <div>Vests Detected</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-2">
+    <div class="card">
+        <h2>Quick Upload</h2>
+        <input type="file" id="quickUpload" accept="image/*" style="margin: 1rem 0;">
+        <button class="btn btn-primary" onclick="quickUpload()">Upload & Analyze</button>
+        <div id="quickResult"></div>
+    </div>
+    
+    <div class="card">
+        <h2>Recent Activity</h2>
+        <div id="recentActivity" class="loading">Loading...</div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block scripts %}
+<script>
+    async function quickUpload() {
+        const fileInput = document.getElementById('quickUpload');
+        const resultDiv = document.getElementById('quickResult');
+        
+        if (!fileInput.files[0]) {
+            alert('Please select an image file');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('image', fileInput.files[0]);
+        
+        resultDiv.innerHTML = '<div class="loading">Processing...</div>';
+        
+        try {
+            const response = await fetch('/api/images', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        Analysis complete!<br>
+                        Detections: ${data.detections.length}<br>
+                        <a href="/result/${data.id}">View Details</a>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `<div class="error">Error: ${data.error.message}</div>`;
+            }
+        } catch (error) {
+            resultDiv.innerHTML = `<div class="error">Upload failed: ${error.message}</div>`;
+        }
+    }
+</script>
+{% endblock scripts %}
